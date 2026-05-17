@@ -1,0 +1,39 @@
+server:
+  port: 8083
+
+spring:
+  # Base par défaut pour que l'infrastructure JPA valide le démarrage
+  datasource:
+    jdbc-url: jdbc:postgresql://db-read:5432/db_read
+    username: user
+    password: password
+    driver-class-name: org.postgresql.Driver
+
+  # Bases spécifiques pour ton DataSourceConfig
+  datasources:
+    write:
+      jdbc-url: jdbc:postgresql://db-write:5432/db_write
+      username: user
+      password: password
+      driver-class-name: org.postgresql.Driver
+    read:
+      jdbc-url: jdbc:postgresql://db-read:5432/db_read
+      username: user
+      password: password
+      driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+
+  kafka:
+    bootstrap-servers: kafka-1:9092,kafka-2:9092,kafka-3:9092
+    consumer:
+      group-id: boulangerie-sync-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "*"
+        spring.json.use.type.headers: false
+        spring.json.value.default.type: fr.upec.episen.grid.synchro_worker.model.CommandeCreeeEvent

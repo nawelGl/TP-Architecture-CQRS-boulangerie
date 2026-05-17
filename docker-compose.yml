@@ -1,0 +1,113 @@
+version: '3.8'
+
+services:
+  # --- BASES DE DONNÉES ---
+  db-write:
+    image: postgres:15-alpine
+    container_name: db-write
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: db_write
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./init-db/write:/docker-entrypoint-initdb.d # Injection auto des tables
+
+  db-read:
+    image: postgres:15-alpine
+    container_name: db-read
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: db_read
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./init-db/read:/docker-entrypoint-initdb.d # Injection auto du stock
+
+  # --- CLUSTER KAFKA OFFICIEL (RÉSEAU INTERNE STRICT) ---
+  kafka-1:
+    image: apache/kafka:3.7.0
+    container_name: kafka-1
+    environment:
+      - CLUSTER_ID=NjI4YjFkYzYyNmVjNGM5OQ
+      - KAFKA_NODE_ID=1
+      - KAFKA_PROCESS_ROLES=broker,controller
+      - KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka-1:9093,2@kafka-2:9093,3@kafka-3:9093
+      - KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka-1:9092
+      - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+
+  kafka-2:
+    image: apache/kafka:3.7.0
+    container_name: kafka-2
+    environment:
+      - CLUSTER_ID=NjI4YjFkYzYyNmVjNGM5OQ
+      - KAFKA_NODE_ID=2
+      - KAFKA_PROCESS_ROLES=broker,controller
+      - KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka-1:9093,2@kafka-2:9093,3@kafka-3:9093
+      - KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka-2:9092
+      - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+
+  kafka-3:
+    image: apache/kafka:3.7.0
+    container_name: kafka-3
+    environment:
+      - CLUSTER_ID=NjI4YjFkYzYyNmVjNGM5OQ
+      - KAFKA_NODE_ID=3
+      - KAFKA_PROCESS_ROLES=broker,controller
+      - KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka-1:9093,2@kafka-2:9093,3@kafka-3:9093
+      - KAFKA_LISTENERS=PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093
+      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka-3:9092
+      - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_INTER_BROKER_LISTENER_NAME=PLAINTEXT
+
+  # --- SERVICES APPLICATIFS ---
+  api-write:
+    build: ./api-write
+    container_name: api-write
+    ports:
+      - "8081:8081"
+    depends_on:
+      - kafka-1
+      - db-write
+
+  api-read:
+    build: ./api-read
+    container_name: api-read
+    ports:
+      - "8082:8082"
+    depends_on:
+      - db-read
+
+  worker-synchro:
+    build: ./synchro-worker
+    container_name: worker-synchro
+    depends_on:
+      - kafka-1
+      - db-write
+      - db-read
+    environment:
+      # Base principale obligatoire pour que l'infrastructure standard de Spring s'initialise
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://db-read:5432/db_read
+      - SPRING_DATASOURCE_USERNAME=user
+      - SPRING_DATASOURCE_PASSWORD=password
+      - SPRING_DATASOURCE_DRIVER_CLASS_NAME=org.postgresql.Driver
+
+      # Base d'écriture mappée sur le Bean Java "dataSourceWrite" (Prefix: spring.datasources.write)
+      - SPRING_DATASOURCES_WRITE_URL=jdbc:postgresql://db-write:5432/db_write
+      - SPRING_DATASOURCES_WRITE_USERNAME=user
+      - SPRING_DATASOURCES_WRITE_PASSWORD=password
+      - SPRING_DATASOURCES_WRITE_DRIVER_CLASS_NAME=org.postgresql.Driver
+
+      # Base de lecture mappée sur le Bean Java "dataSourceRead" (Prefix: spring.datasources.read)
+      - SPRING_DATASOURCES_READ_URL=jdbc:postgresql://db-read:5432/db_read
+      - SPRING_DATASOURCES_READ_USERNAME=user
+      - SPRING_DATASOURCES_READ_PASSWORD=password
+      - SPRING_DATASOURCES_READ_DRIVER_CLASS_NAME=org.postgresql.Driver
+
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
