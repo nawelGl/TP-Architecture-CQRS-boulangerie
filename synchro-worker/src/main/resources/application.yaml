@@ -28,6 +28,10 @@ spring:
 
   kafka:
     bootstrap-servers: kafka-1:9092,kafka-2:9092,kafka-3:9092
+    streams:
+      application-id: boulangerie-streams-processor
+      properties:
+        auto.offset.reset: earliest
     consumer:
       group-id: boulangerie-sync-group
       auto-offset-reset: earliest
